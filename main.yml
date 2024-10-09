@@ -1,0 +1,40 @@
+name: Run Python Script Weekly
+
+# Trigger this workflow every Monday at 9 AM (adjust time as needed)
+on:
+  schedule:
+    # Every Monday at 13:00 UTC
+    - cron: '0 13 * * 1'
+
+jobs:
+  run_script:
+    runs-on: ubuntu-latest  # Use the latest version of Ubuntu
+
+    steps:
+    # Step 1: Check out the repository
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    # Step 2: Set up Python
+    - name: Set up Python 3.x
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x'
+
+    # Step 3: Install dependencies from requirements.txt
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+
+    # Step 4: Run the Python script
+    - name: Run Python script
+      run: python scrape_events.py
+      env:
+        EMAIL_USER: ${{ secrets.EMAIL_USER }}
+        EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+
+    # Optional: Step 5: Save CSV as an artifact (downloadable from the Actions tab)
+    - name: Upload CSV artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: events_csv
+        path: ./output.csv  # Adjust to your actual CSV file location

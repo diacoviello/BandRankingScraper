@@ -1,0 +1,5 @@
+requests~=2.32.3
+pandas~=2.2.3
+datetime~=5.5
+timedelta
+beautifulsoup4~=4.12.3

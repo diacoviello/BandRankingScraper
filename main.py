@@ -1,7 +1,47 @@
+import os
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 from datetime import datetime, timedelta
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
+
+def send_email_with_gmail(csv_file_path):
+    # Use environment variables for security
+    receiver_email = "iacoviello.david@gmail.com"
+    sender_email = os.getenv("EMAIL_USER")
+    password = os.getenv("EMAIL_PASSWORD")
+
+    # Set up the email content
+    subject = "Weekly CSV Report"
+    body = "Please find attached the latest CSV file."
+
+    # Create the email
+    msg = MIMEMultipart()
+    msg['From'] = sender_email
+    msg['To'] = receiver_email
+    msg['Subject'] = subject
+    msg.attach(MIMEText(body, 'plain'))
+
+    # Secure connection to Gmail's SMTP server
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()  # Start TLS encryption
+        server.login(sender_email, password)
+
+        # Send email
+        with open(csv_file, 'rb') as attachment:
+            msg.attach(MIMEText(attachment.read(), 'csv'))
+            server.sendmail(sender_email, receiver_email, msg.as_string())
+            print("Email sent successfully!")
+
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+    finally:
+        server.quit()
+
 
 # URL for the main events page
 base_url = "https://usbands.org/events/"  # Ensure trailing slash
@@ -190,33 +230,40 @@ df = pd.DataFrame(all_scores)
 # Convert the 'Date' column to datetime format
 df['Date'] = pd.to_datetime(df['Date'], errors='coerce')  # Convert to datetime
 
+
 # Define the dynamic CSV file name
-csv_file = f"all_scores_for_the_week_of_{formatted_start_of_week}.csv"
+def generate_csv_file():
+    csv_file = f"all_scores_for_the_week_of_{formatted_start_of_week}.csv"
+    # Sort by Date (ascending),  Division, Rank, and Host (all ascending)
+    if not df.empty:
+        df_sorted = df.sort_values(by=['Date', 'Division', 'Rank', 'Host'], ascending=[True, True, True, True])
 
-# Sort by Date (ascending),  Division, Rank, and Host (all ascending)
-if not df.empty:
-    df_sorted = df.sort_values(by=['Date', 'Division', 'Rank', 'Host'], ascending=[True, True, True, True])
-
-    # Check if CSV exists and read the first row if so
-    try:
-        existing_df = pd.read_csv(csv_file)
-        # Compare the date in the existing file with the current week's date
-        if not existing_df.empty:
-            first_date_in_csv = pd.to_datetime(existing_df['Date'].iloc[0])
-            if first_date_in_csv == start_of_week:
-                # If the date is the same, overwrite the file
-                df_sorted.to_csv(csv_file, index=False)
-                print(f"Overwriting existing CSV file: {csv_file}")
+        # Check if CSV exists and read the first row if so
+        try:
+            existing_df = pd.read_csv(csv_file)
+            # Compare the date in the existing file with the current week's date
+            if not existing_df.empty:
+                first_date_in_csv = pd.to_datetime(existing_df['Date'].iloc[0])
+                if first_date_in_csv == start_of_week:
+                    # If the date is the same, overwrite the file
+                    df_sorted.to_csv(csv_file, index=False)
+                    print(f"Overwriting existing CSV file: {csv_file}")
+                else:
+                    # If the date is different, append the new data
+                    combined_df = pd.concat([existing_df, df_sorted]).drop_duplicates()
+                    combined_df.to_csv(csv_file, index=False)
+                    print(f"Appending to CSV file: {csv_file}")
             else:
-                # If the date is different, append the new data
-                combined_df = pd.concat([existing_df, df_sorted]).drop_duplicates()
-                combined_df.to_csv(csv_file, index=False)
-                print(f"Appending to CSV file: {csv_file}")
-        else:
-            # If existing CSV is empty, create it
+                # If existing CSV is empty, create it
+                df_sorted.to_csv(csv_file, index=False)
+                print(f"Creating new CSV file: {csv_file}")
+        except FileNotFoundError:
+            # If the CSV doesn't exist, create it
             df_sorted.to_csv(csv_file, index=False)
             print(f"Creating new CSV file: {csv_file}")
-    except FileNotFoundError:
-        # If the CSV doesn't exist, create it
-        df_sorted.to_csv(csv_file, index=False)
-        print(f"Creating new CSV file: {csv_file}")
+    return csv_file
+
+
+# call to function to obtain correct path
+csv_file = generate_csv_file()
+send_email_with_gmail(csv_file)
