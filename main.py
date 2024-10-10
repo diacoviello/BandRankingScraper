@@ -49,10 +49,11 @@ response = requests.get(base_url)
 soup = BeautifulSoup(response.text, 'html.parser')
 
 event_links = []
+performer_data = []
 all_scores = []
 
 # Define target states
-target_states = ["NJ", "NY", "PA"]
+target_states = ["NJ", "NY", "PA", "MA", "DE", "MD"]
 
 # Example original date strings
 original_date_strs = ["Sat, Sep 28", "Sun, Oct 05"]
@@ -143,14 +144,64 @@ for event_url, event_host, event_date in event_links:
     schedule_section = event_soup.find('h2', string='Schedule')  # Find the 'Schedule' heading
     performer_locations = {}
 
+    # if schedule_section:
+    #     schedule_table = schedule_section.find_next('table')
+    #     if schedule_table:
+    #         for row in schedule_table.find_all('tr', class_='performingUnit'):
+    #             # Extract the unit name and hyperlink (contained in <a>)
+    #             unit_tag = row.find('a', class_='unit')
+    #             unit_name = unit_tag.text.strip()  # Get the text for the unit
+    #             unit_link = unit_tag['href']  # Get the hyperlink for the unit
+    #
+    #             # Extract the location (contained in <div class="cityState">)
+    #             location = row.find('div', class_='cityState').text.strip()
+    #
+    #             # Extract the location (contained in <div class="class">)
+    #             division = row.find('div', class_='class').text.strip()
+    #
+    #             # Debugging line to ensure correct extraction
+    #             print(f"Added performer: {unit_name} -> {location}, link: {unit_link}")
+    # # if schedule_section:
+    # #     schedule_table = schedule_section.find_next('table')
+    # #     if schedule_table:
+    # #         for row in schedule_table.find_all('tr', class_='performingUnit'):
+    # #             unit_name = row.find('td', class_='unit').text.strip()
+    # #             location = row.find('div', class_='cityState').text.strip()
+    # #             # performer_locations[unit_name.lower()] = location  # Store in the dictionary
+    # #             print(f"Added performer location: {unit_name} -> {location}")  # Debugging line
+
     if schedule_section:
         schedule_table = schedule_section.find_next('table')
         if schedule_table:
             for row in schedule_table.find_all('tr', class_='performingUnit'):
-                unit_name = row.find('td', class_='unit').text.strip()
+                # Extract the unit name and hyperlink (contained in <a>)
+                unit_tag = row.find('a', class_='unit')
+                unit_name = unit_tag.text.strip()  # Get the text for the unit
+                unit_link = unit_tag['href']  # Get the hyperlink for the unit
+
+                # Extract the location (contained in <div class="cityState">)
                 location = row.find('div', class_='cityState').text.strip()
-                performer_locations[unit_name.lower()] = location  # Store in the dictionary
-                print(f"Added performer location: {unit_name} -> {location}")  # Debugging line
+
+                # Extract the division (contained in <div class="class">)
+                division_raw = row.find('div', class_='class').text.strip()
+
+                # Split the division string on "/" and strip extra spaces
+                division_parts = [part.strip() for part in division_raw.split('/')]
+                division_number = division_parts[0]  # "I"
+                division_class = division_parts[1]  # "A Class"
+
+                # Debugging line to ensure correct extraction
+                print(
+                    f"Added performer: {unit_name} -> {location}, link: {unit_link}, division: {division_number} {division_class}")
+
+                # Store the extracted data
+                performer_data.append({
+                    'Unit Name': unit_name,
+                    'Location': location,
+                    'Link': unit_link,
+                    'Division Number': division_number,
+                    'Division Class': division_class
+                })
 
     current_division = None
     for row in score_section.find_all('tr'):
@@ -170,7 +221,7 @@ for event_url, event_host, event_date in event_links:
                 normalized_name = name.lower()
 
                 # Find the performer location based on the normalized unit name
-                performer_location = "Unknown Location"  # Default value
+                performer_location = ""  # Default value
 
                 # Check if the name matches a key in performer_locations
                 if normalized_name in performer_locations:
@@ -209,12 +260,11 @@ for event_url, event_host, event_date in event_links:
 
                 # Append to the scores
                 all_scores.append({
-                    'Date': formatted_date,
                     'Division': current_division,
-                    'Rank': int(rank),
                     'School': name,
                     'Score': float(score),
                     'Location': performer_location,
+                    'Date': formatted_date,
                     'Host': "".join('@ ' + event_host)
                 })
 
@@ -236,9 +286,40 @@ def generate_csv_file():
     csv = f"csv_files/all_scores_for_the_week_of_{formatted_start_of_week}.csv"
     # Sort by Date (ascending),  Division, Rank, and Host (all ascending)
     if not df.empty:
-        df_sorted = df.sort_values(by=['Date', 'Division', 'Rank', 'Host'], ascending=[True, True, True, True])
+        # Rank the scores within each division
+        df['Division Ranking'] = df.groupby('Division')['Score'].rank(ascending=False, method='min')
 
-        # Check if CSV exists and read the first row if so
+        # Function to convert numeric ranking to ordinal string (1st, 2nd, 3rd, etc.)
+        def rank_to_ordinal(ranking):
+            ranking = int(ranking)
+            if 10 <= ranking % 100 <= 20:
+                suffix = 'th'
+            else:
+                suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(ranking % 10, 'th')
+            return f"{ranking}{suffix}"
+
+        # Apply ranking to ordinal value
+        df['Rank'] = df['Division Ranking'].apply(rank_to_ordinal)
+
+        # Insert the Rank column
+        df.insert(1, 'Rank', df.pop('Rank'))
+
+        # df_sorted = df.sort_values(by=['Date', 'Division', 'Score', 'Host'], ascending=[True, True, True, True])
+        df_sorted = df.sort_values(by=['Date', 'Division', 'Score', 'Host'], ascending=[True, True, False, True])
+
+        # Drop the 'Numeric_Rank' column if it's no longer needed
+        df_sorted = df_sorted.drop(columns=['Division Ranking'])
+
+        # Create a new DataFrame to store the final output with blank rows between divisions
+        output_df = pd.DataFrame()
+
+        # Iterate over each division and append data followed by a blank row
+        for division, group in df_sorted.groupby('Division'):
+            output_df = pd.concat([output_df, group, pd.DataFrame([[]])])  # Append the division's group and a blank row
+
+        print(output_df)
+
+        # Check if CSV exists and read the first row if it does
         try:
             existing_df = pd.read_csv(csv)
             # Compare the date in the existing file with the current week's date
@@ -246,24 +327,24 @@ def generate_csv_file():
                 first_date_in_csv = pd.to_datetime(existing_df['Date'].iloc[0])
                 if first_date_in_csv == start_of_week:
                     # If the date is the same, overwrite the file
-                    df_sorted.to_csv(csv, index=False)
+                    output_df.to_csv(csv, index=False)
                     print(f"Overwriting existing CSV file: {csv}")
                 else:
                     # If the date is different, append the new data
-                    combined_df = pd.concat([existing_df, df_sorted]).drop_duplicates()
+                    combined_df = pd.concat([existing_df, output_df]).drop_duplicates()
                     combined_df.to_csv(csv, index=False)
                     print(f"Appending to CSV file: {csv}")
             else:
                 # If existing CSV is empty, create it
-                df_sorted.to_csv(csv, index=False)
+                output_df.to_csv(csv, index=False)
                 print(f"Creating new CSV file: {csv}")
         except FileNotFoundError:
             # If the CSV doesn't exist, create it
-            df_sorted.to_csv(csv, index=False)
+            output_df.to_csv(csv, index=False)
             print(f"Creating new CSV file: {csv}")
     return csv
 
 
 # call to function to obtain correct path
 csv_file = generate_csv_file()
-send_email_with_gmail(csv_file)
+# send_email_with_gmail(csv_file)
