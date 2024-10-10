@@ -32,7 +32,7 @@ def send_email_with_gmail(csv_file_path):
         server.login(sender_email, password)
 
         # Send email
-        with open(csv_file, 'rb') as attachment:
+        with open(csv_file_path, 'rb') as attachment:
             msg.attach(MIMEText(attachment.read(), 'csv'))
             server.sendmail(sender_email, receiver_email, msg.as_string())
             print("Email sent successfully!")
@@ -53,30 +53,6 @@ all_scores = []
 
 # Define target states
 target_states = ["NJ", "NY", "PA"]
-
-# Example original date strings
-original_date_strs = ["Sat, Sep 28", "Sun, Oct 05"]
-
-# Initialize a list to hold the formatted dates
-formatted_dates = []
-
-# Assuming the current year is 2024
-current_year = 2024
-
-# Loop through each original date string
-for original_date_str in original_date_strs:
-    # Convert the string into a datetime object
-    date_object = pd.to_datetime(f"{original_date_str}, {current_year}", format='%a, %b %d, %Y')
-
-    # Format the date as "Saturday, September 28, 2024"
-    formatted_date = date_object.strftime('%A, %B %d, %Y')
-
-    # Store the formatted date
-    formatted_dates.append(formatted_date)
-
-# Display the formatted dates
-for date in formatted_dates:
-    print(date)  # Output: "Saturday, September 28, 2024" and "Sunday, October 05, 2024"
 
 # Get today's date
 today = pd.to_datetime("today").normalize()
@@ -125,7 +101,6 @@ for card in soup.find_all('div', class_='card shadow mb-3 bg-white border-0 shad
 
 # Fetch the table for each event page
 for event_url, event_host, event_date in event_links:
-
     print(f"Fetching scores from: {event_url}")  # Debugging line
     event_response = requests.get(event_url)
 
@@ -147,8 +122,10 @@ for event_url, event_host, event_date in event_links:
         schedule_table = schedule_section.find_next('table')
         if schedule_table:
             for row in schedule_table.find_all('tr', class_='performingUnit'):
-                unit_name = row.find('td', class_='unit').text.strip()
-                location = row.find('div', class_='cityState').text.strip()
+                unit_name_td = row.find('td', class_='unit')  # Get the entire <td> for the unit name and location
+                unit_name = unit_name_td.find('a').text.strip()  # Extract unit name from <a>
+                location = unit_name_td.find('div', class_='cityState').text.strip()  # Extract location from <div>
+
                 performer_locations[unit_name.lower()] = location  # Store in the dictionary
                 print(f"Added performer location: {unit_name} -> {location}")  # Debugging line
 
@@ -214,8 +191,7 @@ for event_url, event_host, event_date in event_links:
                     'Rank': int(rank),
                     'School': name,
                     'Score': float(score),
-                    'Location': performer_location,
-                    'Host': "".join('@ ' + event_host)
+                    'Location': performer_location
                 })
 
 # Check if we collected any scores
@@ -230,40 +206,78 @@ df = pd.DataFrame(all_scores)
 # Convert the 'Date' column to datetime format
 df['Date'] = pd.to_datetime(df['Date'], errors='coerce')  # Convert to datetime
 
+# Remove the 'Date' column without affecting the index
+df.drop(columns=['Date'], inplace=True)
+
+# Sort DataFrame by Division, then Score in descending order
+df_sorted = df.sort_values(by=['Division', 'Score'], ascending=[True, False])
+
+# Assign ranks based on the sorted order
+df_sorted['Rank'] = df_sorted.groupby('Division')['Score'].rank(method='min', ascending=False)
+
+# Create a new DataFrame to store the final output with blank rows between divisions
+output_df = pd.DataFrame()
+
+# Iterate over each division and append data followed by a blank row
+for division, group in df_sorted.groupby('Division'):
+    output_df = pd.concat([output_df, group])  # Append the division's group
+    output_df = pd.concat([output_df, pd.DataFrame(columns=group.columns)])  # Append a blank row
+
+# Optionally, reset the index if you want a clean index in the output DataFrame
+output_df.reset_index(drop=True, inplace=True)
+
+# Now output_df contains the scores with blank rows between each division
+print(output_df)
+
+
+# Convert numeric ranking to ordinal string (1st, 2nd, 3rd, etc.)
+def rank_to_ordinal(ranking):
+    ranking = int(ranking)
+    if 10 <= ranking % 100 <= 20:
+        suffix = 'th'
+    else:
+        suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(ranking % 10, 'th')
+    return f"{ranking}{suffix}"
+
+
+# Apply ranking to ordinal value
+df_sorted['Rank'] = df_sorted['Rank'].apply(rank_to_ordinal)
+
+# Ensure the Rank column is placed correctly
+df_sorted.insert(1, 'Rank', df_sorted.pop('Rank'))
+
 
 # Define the dynamic CSV file name
 def generate_csv_file():
     csv = f"csv_files/all_scores_for_the_week_of_{formatted_start_of_week}.csv"
-    # Sort by Date (ascending),  Division, Rank, and Host (all ascending)
-    if not df.empty:
-        df_sorted = df.sort_values(by=['Date', 'Division', 'Rank', 'Host'], ascending=[True, True, True, True])
 
-        # Check if CSV exists and read the first row if so
+    if not df_sorted.empty:
+        # Check if CSV exists and handle file operations
         try:
             existing_df = pd.read_csv(csv)
-            # Compare the date in the existing file with the current week's date
             if not existing_df.empty:
                 first_date_in_csv = pd.to_datetime(existing_df['Date'].iloc[0])
                 if first_date_in_csv == start_of_week:
                     # If the date is the same, overwrite the file
                     df_sorted.to_csv(csv, index=False)
-                    print(f"Overwriting existing CSV file: {csv}")
+                    print(f"Updated existing CSV: {csv}")
                 else:
-                    # If the date is different, append the new data
-                    combined_df = pd.concat([existing_df, df_sorted]).drop_duplicates()
-                    combined_df.to_csv(csv, index=False)
-                    print(f"Appending to CSV file: {csv}")
+                    # Append new scores to the CSV
+                    df_sorted.to_csv(csv, mode='a', header=False, index=False)
+                    print(f"Appended new scores to CSV: {csv}")
             else:
-                # If existing CSV is empty, create it
                 df_sorted.to_csv(csv, index=False)
-                print(f"Creating new CSV file: {csv}")
+                print(f"Created new CSV: {csv}")
+
         except FileNotFoundError:
-            # If the CSV doesn't exist, create it
             df_sorted.to_csv(csv, index=False)
-            print(f"Creating new CSV file: {csv}")
-    return csv
+            print(f"Created new CSV: {csv}")
+
+        send_email_with_gmail(csv)  # Send the email after generating the CSV
+    else:
+        print("No scores available to save.")
 
 
-# call to function to obtain correct path
-csv_file = generate_csv_file()
-send_email_with_gmail(csv_file)
+# Call the function to generate the CSV file
+generate_csv_file()
+# send_email_with_gmail(csv_file)
