@@ -39,5 +39,5 @@ jobs:
         echo "Uploading $latest_csv as an artifact."
       uses: actions/upload-artifact@v3
       with:
-        name: events_csv
-        path: ./output.csv  # Adjust to your actual CSV file location
+        name: latest_csv
+        path: ./csv_files/all_scores_for_the_week_of_*.csv
