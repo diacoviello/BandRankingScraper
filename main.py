@@ -280,4 +280,3 @@ def generate_csv_file():
 
 # Call the function to generate the CSV file
 generate_csv_file()
-# send_email_with_gmail(csv_file)
