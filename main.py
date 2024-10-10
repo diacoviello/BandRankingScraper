@@ -37,6 +37,9 @@ def send_email_with_gmail(csv_file_path):
             server.sendmail(sender_email, receiver_email, msg.as_string())
             print("Email sent successfully!")
 
+        server.sendmail(sender_email, receiver_email, msg.as_string())
+        print("Email sent successfully!")
+
     except Exception as e:
         print(f"Failed to send email: {e}")
     finally:

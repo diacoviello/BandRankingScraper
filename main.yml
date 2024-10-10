@@ -34,6 +34,9 @@ jobs:
 
     # Optional: Step 5: Save CSV as an artifact (downloadable from the Actions tab)
     - name: Upload CSV artifact
+      run: |
+        latest_csv=$(ls csv_files/*.csv | sort -V | tail -n 1)
+        echo "Uploading $latest_csv as an artifact."
       uses: actions/upload-artifact@v3
       with:
         name: events_csv
