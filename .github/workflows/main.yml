@@ -24,7 +24,7 @@ jobs:
 
       # Step 2: Check out the repository
       - name: Checkout code
-        uses: actions/checkout@latest
+        uses: actions/checkout@v3
 
       # Step 3: Set up Python
       - name: Set up Python 3.x
