@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest  # Use the latest version of Ubuntu
 
     steps:
-    # Step 1: Check if it's September to December
+        # Step 1: Check if it's September to December
       - name: Check month
         id: check_month
         run: |
@@ -22,28 +22,28 @@ jobs:
             exit 0
           fi
 
-    # Step 2: Check out the repository
+      # Step 2: Check out the repository
     - name: Checkout code
       uses: actions/checkout@v2
 
-    # Step 3: Set up Python
+      # Step 3: Set up Python
     - name: Set up Python 3.x
       uses: actions/setup-python@v2
       with:
         python-version: '3.x'
 
-    # Step 4: Install dependencies from requirements.txt
+      # Step 4: Install dependencies from requirements.txt
     - name: Install dependencies
       run: pip install -r requirements.txt
 
-    # Step 5: Run the Python script
+      # Step 5: Run the Python script
     - name: Run Python script
       run: python scrape_events.py
       env:
         EMAIL_USER: ${{ secrets.EMAIL_USER }}
         EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
 
-    # Step 6: Save CSV as an artifact (downloadable from the Actions tab)
+      # Step 6: Save CSV as an artifact (downloadable from the Actions tab)
     - name: Upload CSV artifact
       run: |
         latest_csv=$(ls csv_files/*.csv | sort -V | tail -n 1)
