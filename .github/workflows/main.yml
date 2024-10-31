@@ -5,6 +5,7 @@ on:
   schedule:
     # Every Monday at 13:00 UTC
     - cron: '0 13 * * 1'
+  workflow_dispatch: # Allows user to manually trigger
 
 jobs:
   run_script:
