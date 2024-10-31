@@ -256,7 +256,8 @@ def generate_csv_file():
         try:
             existing_df = pd.read_csv(csv)
             if not existing_df.empty:
-                first_date_in_csv = pd.to_datetime(existing_df['Date'].iloc[0])
+                first_date_in_csv = existing_df['Date'].iloc[0]
+
                 if first_date_in_csv == start_of_week:
                     # If the date is the same, overwrite the file
                     df_sorted.to_csv(csv, index=False)
