@@ -209,9 +209,6 @@ df = pd.DataFrame(all_scores)
 # Convert the 'Date' column to datetime format
 df['Date'] = pd.to_datetime(df['Date'], errors='coerce')  # Convert to datetime
 
-# Remove the 'Date' column without affecting the index
-df.drop(columns=['Date'], inplace=True)
-
 # Sort DataFrame by Division, then Score in descending order
 df_sorted = df.sort_values(by=['Division', 'Score'], ascending=[True, False])
 
