@@ -1,0 +1,59 @@
+name: Run Python Script Weekly
+
+# Trigger this workflow every Monday at 9 AM (adjust time as needed)
+on:
+  schedule:
+    # Every Monday at 13:00 UTC
+    - cron: '0 13 * * 1'
+  workflow_dispatch: # Allows user to manually trigger
+
+jobs:
+  run_script:
+    runs-on: ubuntu-latest  # Use the latest version of Ubuntu
+
+    steps:
+      # Step 1: Check if it's September to December
+      - name: Check month
+        id: check_month
+        run: |
+          CURRENT_MONTH=$(date +'%m')
+          if [[ "$CURRENT_MONTH" -lt 9 || "$CURRENT_MONTH" -gt 12 ]]; then
+            echo "Not within September to December. Exiting."
+            exit 0
+          fi
+
+      # Step 2: Check out the repository
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 3: Set up Python
+      - name: Set up Python 3.x
+        uses: actions/setup-python@v3
+        with:
+          python-version: '3.x'
+
+      # Step 4: Install dependencies from requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Step 5: Run the Python script
+      - name: Run Python script
+        run: python scrape_events.py
+        env:
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+
+      # Step 6: Find the latest CSV file and upload it as an artifact
+      - name: Find latest CSV and upload
+        id: upload_csv
+        run: |
+          latest_csv=$(ls csv_files/*.csv | sort -V | tail -n 1)
+          echo "Uploading $latest_csv as an artifact."
+          echo "latest_csv=$latest_csv" >> $GITHUB_ENV
+
+      # Step 7: Save CSV as an artifact (downloadable from the Actions tab)
+      - name: Upload CSV artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: latest_csv
+          path: ./csv_files/all_scores_for_the_week_of_*.csv
